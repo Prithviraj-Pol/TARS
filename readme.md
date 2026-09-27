@@ -248,6 +248,10 @@ Who it is, what machine it runs on, what it can do and **what it cannot do** are
 
 The **limits** half is the important one: it knows its sight is a single frame on demand rather than a live feed, that it acts on this machine only, and that anything outside its tool list should be stated plainly instead of improvised.
 
+#### 🛡️ Truthful Action Execution
+
+TARS strictly separates an *attempt* from a *verified success*. Tool executions no longer silently fall back to "Done." If an action like `create_file` or `create_folder` is executed, TARS checks the real filesystem to verify the item exists before claiming success. If a target already exists, it reports `ALREADY_EXISTS`. If it sends an open request to the OS, it reports exactly that — an open request was sent, rather than fabricating that a window is definitively visible. The assistant's internal system prompt enforces a **Tool Truth Rule**, ensuring it never lies about the state of your computer.
+
 All prompt wording lives in `core/prompt.txt` with `{tokens}` the app fills in — so you can rewrite the personality without touching Python, and a stray brace in your own wording can't break startup.
 
 ### 🩹 Fixes
@@ -275,6 +279,10 @@ All prompt wording lives in `core/prompt.txt` with `{tokens}` the app fills in �
 - The **brows barely moved** — 6 px of travel on a 250 px head, because the rig weights halved an already small constant. Derived from the anatomy instead: 19 px.
 
 - The activity log opened with **a dozen lines of plumbing** — one per plugin loaded, plus wake-word and briefing status. The console still carries the full boot transcript; the log now shows your conversation, state changes and anything you have to act on, and nothing else.
+
+- **Duplicate Desktop Shortcuts Prevented**: Attempting to create a shortcut when one already exists now returns an idempotency message rather than blindly overwriting or recreating it.
+
+- **Wake-Word Auto-Enable**: The hands-free "TARS" wake word is now automatically enabled if the trained model exists. You no longer need to rely on Push-to-Talk or manually dive into config to get true voice-activated operation out of the box.
 
 \---
 
