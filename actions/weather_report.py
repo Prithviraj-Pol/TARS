@@ -46,7 +46,7 @@ def _log(message: str, player=None) -> None:
     print(f"[Weather] {message}")
     if player:
         try:
-            name = getattr(player, "_asst_name", getattr(player, "_assistant_name", "JARVIS"))
+            name = getattr(player, "_asst_name", getattr(player, "_assistant_name", "tars"))
             player.write_log(f"{name}: {message}")
         except Exception:
             pass

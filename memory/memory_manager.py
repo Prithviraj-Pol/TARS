@@ -381,7 +381,7 @@ def search_memory(query: str, limit: int = 8) -> str:
 
 
 def all_entries_for_ui() -> list[dict]:
-    """Flat list for the memory panel: what JARVIS knows, and when it learned it.
+    """Flat list for the memory panel: what tars knows, and when it learned it.
     Sorted newest first so the panel opens on what changed most recently."""
     memory = load_memory()
     rows = []

@@ -1,12 +1,12 @@
 """
-core/audio_devices.py — pick which microphone and which speakers JARVIS uses.
+core/audio_devices.py — pick which microphone and which speakers tars uses.
 
 WHY
     Both audio streams in main.py were opened without a `device=` argument, so
     they always took whatever the operating system called "default". On a laptop
     with a built-in mic, a webcam mic and a headset that is a coin toss — and on
     Windows the default *moves on its own* the moment you plug a headset in.
-    "JARVIS can't hear me" almost always means "JARVIS is listening to the
+    "tars can't hear me" almost always means "tars is listening to the
     monitor's microphone".
 
 WHY NAMES, NOT INDICES

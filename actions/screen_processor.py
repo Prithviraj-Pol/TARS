@@ -1,5 +1,5 @@
 """
-Screen & webcam capture for JARVIS vision.
+Screen & webcam capture for tars vision.
 
 Provides the two capture entry points main.py uses — `_capture_screen()` and
 `_capture_camera()` — plus their helpers (compression, camera auto-detection,

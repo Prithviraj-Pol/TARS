@@ -188,7 +188,7 @@ def _build_dataset() -> tuple[np.ndarray, np.ndarray]:
 
     # 2. Negatives: Other words, phonetically similar words, common commands
     other_words = [
-        "hello", "computer", "weather", "search", "alexa", "siri", "jarvis",
+        "hello", "computer", "weather", "search", "alexa", "siri", "tars",
         "open", "close", "stop", "play", "pause", "chrome", "settings",
         "time", "date", "status", "mute", "unmute",
         # Rhymes and near-homophones to ensure sharp discrimination

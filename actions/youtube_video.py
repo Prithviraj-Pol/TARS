@@ -180,7 +180,7 @@ def _summarize_with_gemini(transcript: str, video_url: str) -> str:
         timeout_ms=60_000,
         config=types.GenerateContentConfig(
             system_instruction=(
-                "You are JARVIS, an AI assistant. "
+                "You are tars, an AI assistant. "
                 "Summarize YouTube video transcripts clearly and concisely. "
                 "Structure: 1-sentence overview, then 3-5 key points. "
                 "Be direct. Address the user as 'sir'. "
@@ -201,7 +201,7 @@ def _save_summary(content: str, video_url: str) -> str:
     filepath = desktop / filename
 
     header = (
-        f"JARVIS — YouTube Summary\n"
+        f"tars — YouTube Summary\n"
         f"{'─' * 50}\n"
         f"URL    : {video_url}\n"
         f"Date   : {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"

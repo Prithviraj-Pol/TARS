@@ -7,7 +7,7 @@ user never pulls Windows-only libraries (and vice-versa). Then it fetches the
 Playwright browsers needed for web automation (current-OS builds only).
 
 Two things it deliberately does NOT install:
-  * the optional local wake word ("Hey Jarvis") — one-click, opt-in, from
+  * the optional local wake word ("Hey tars") — one-click, opt-in, from
     ⚙ → WAKE WORD inside the app;
   * anything for the avatar — the holographic head renders in software on the
     PyQt6 and numpy already listed here. No GPU, no OpenGL, no extra packages.
@@ -130,7 +130,7 @@ def main() -> None:
     print("\n✅ Setup complete!")
     print("   1) Launch it:  python main.py")
     print("   2) Paste your free Gemini API key when the setup screen appears.")
-    print("   3) (Optional) Enable 'Hey Jarvis' from ⚙ → WAKE WORD.")
+    print("   3) (Optional) Enable 'Hey tars' from ⚙ → WAKE WORD.")
 
 
 if __name__ == "__main__":

@@ -52,8 +52,8 @@ def is_configured() -> bool:
 
 
 def get_assistant_name() -> str:
-    """Return the configured assistant name, or 'JARVIS' if not set."""
-    return load_api_keys().get("assistant_name", "JARVIS") or "JARVIS"
+    """Return the configured assistant name, or 'tars' if not set."""
+    return load_api_keys().get("assistant_name", "tars") or "tars"
 
 
 def get_user_name() -> str:
@@ -70,7 +70,7 @@ def save_assistant_config(assistant_name: str, user_name: str) -> None:
             data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
         except Exception:
             data = {}
-    data["assistant_name"] = assistant_name.strip() or "JARVIS"
+    data["assistant_name"] = assistant_name.strip() or "tars"
     data["user_name"] = user_name.strip()
     CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
 
@@ -105,8 +105,25 @@ def save_voice(voice_name: str) -> None:
 
 
 def get_wake_word_enabled() -> bool:
-    """Whether local wake-word gating is on (assistant sleeps until 'Hey Jarvis')."""
-    return load_api_keys().get("wake_word_enabled", False)
+    """Whether local wake-word gating is on (assistant sleeps until 'TARS' is spoken).
+
+    Default logic (when not explicitly set in config):
+      - If models/tars.onnx exists → True  (the model is ready; enable wake word by default)
+      - Otherwise → False  (model not trained yet; stay always-awake until user sets it up)
+
+    This means wake word is ON automatically once the user has run
+    create_tars_wake_model.py, with no manual settings change required.
+    """
+    cfg = load_api_keys()
+    if "wake_word_enabled" in cfg:
+        return bool(cfg["wake_word_enabled"])
+    # Not explicitly configured — check whether the model file exists
+    try:
+        from pathlib import Path as _Path
+        _model = _Path(__file__).resolve().parent.parent / "models" / "tars.onnx"
+        return _model.exists()
+    except Exception:
+        return False
 
 
 def save_wake_word_enabled(enabled: bool) -> None:

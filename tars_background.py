@@ -4,7 +4,7 @@ tars_background.py -- TARS headless background mode.
 Entry point for the invisible, always-on background process.
 Starts TARS without opening any GUI window.  Runs the local
 wake-word detector continuously.  When "TARS" is heard,
-the existing JarvisLive engine is already connected and wakes.
+the existing tarsLive engine is already connected and wakes.
 When the idle timeout fires (existing _run_sleep_watch) TARS
 goes back to dormant/sleeping mode but the wake detector stays
 active.
@@ -107,7 +107,7 @@ logging.getLogger().addHandler(_stderr_handler)
 _log = logging.getLogger("tars.background")
 
 
-# Redirect print() to the log so JarvisLive status lines appear in the file.
+# Redirect print() to the log so tarsLive status lines appear in the file.
 class _LogStream:
     """Forward print() output to the background log."""
 
@@ -181,9 +181,9 @@ def _acquire_singleton() -> bool:
 # ============================================================
 
 def _run_background() -> None:
-    """Check config, build HeadlessUI, start JarvisLive.
+    """Check config, build HeadlessUI, start tarsLive.
 
-    JarvisLive already handles:
+    tarsLive already handles:
       * Gemini connection + reconnect loop (exponential backoff)
       * Local wake-word detector (_wake_detector, _ensure_wake_detector)
       * Wake/sleep state machine (_awake, _wake_enabled, _run_sleep_watch)
@@ -195,7 +195,7 @@ def _run_background() -> None:
       1. Verify the API key is present (exit with a log entry if not)
       2. Ensure wake word is enabled in config
       3. Verify/download the wake-word model
-      4. Construct HeadlessUI + JarvisLive and run the async loop
+      4. Construct HeadlessUI + tarsLive and run the async loop
     """
     _log.info("=" * 60)
     _log.info("TARS background mode starting  (PID %d)", os.getpid())
@@ -253,21 +253,21 @@ def _run_background() -> None:
     else:
         _log.info("Wake-word model verified.")
 
-    # -- 6d. Build HeadlessUI + JarvisLive ------------------------------------
+    # -- 6d. Build HeadlessUI + tarsLive ------------------------------------
     from core.headless_ui import HeadlessUI
-    from main import JarvisLive
+    from main import tarsLive
 
     ui     = HeadlessUI()
-    jarvis = JarvisLive(ui)
+    tars = tarsLive(ui)
 
     _log.info(
         "Engine constructed.  Connecting to Gemini...  "
         "Say 'TARS' to wake assistant after connection."
     )
 
-    # -- 6e. Run the async event loop (JarvisLive.run never returns normally) -
+    # -- 6e. Run the async event loop (tarsLive.run never returns normally) -
     try:
-        asyncio.run(jarvis.run())
+        asyncio.run(tars.run())
     except KeyboardInterrupt:
         _log.info("KeyboardInterrupt -- shutting down.")
     except SystemExit:

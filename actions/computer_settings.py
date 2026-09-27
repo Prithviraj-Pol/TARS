@@ -678,7 +678,7 @@ _IRREVERSIBLE = {
     # the WiFi off cuts the assistant's own connection to the Live API, so it
     # cannot be asked to turn it back on.
     "toggle_wifi": ("Switch WiFi off or on",
-                    "If this switches WiFi off, JARVIS loses its connection and "
+                    "If this switches WiFi off, tars loses its connection and "
                     "cannot switch it back on by voice."),
 }
 

@@ -1,29 +1,29 @@
 ﻿"""
 core/headless_ui.py -- headless UI adapter for background mode.
 
-Implements ONLY the attributes and methods that JarvisLive actually accesses
+Implements ONLY the attributes and methods that tarsLive actually accesses
 on its `ui` object (determined by auditing every `self.ui.` reference in
 main.py).  Everything visual is a no-op; logs go to the background log file
 via Python's logging module.
 
 This object is intentionally minimal.  Do not add methods that the real
-JarvisUI has but that JarvisLive never calls -- that would only create a
+tarsUI has but that tarsLive never calls -- that would only create a
 maintenance burden.
 
-Methods called by JarvisLive.__init__ (attributes set ON ui):
+Methods called by tarsLive.__init__ (attributes set ON ui):
     on_push_to_talk, ptt_hold, on_text_command, on_remote_clicked,
     on_interrupt, on_voice_change, on_audio_device_change,
     get_plugins, get_plugin_settings, request_say,
     wake_is_ready, wake_get_state, on_wake_toggle, on_wake_manual,
     on_wake_install
 
-Attributes READ by JarvisLive:
+Attributes READ by tarsLive:
     ui.muted           -- bool, always False (never muted in headless mode)
     ui.current_file    -- None (no file upload in headless mode)
     ui._win._ready     -- used in API-key reconfig loop; always True here so
                          the loop exits immediately after logging the error
 
-Methods CALLED by JarvisLive on ui:
+Methods CALLED by tarsLive on ui:
     set_state(state)
     write_log(msg)
     set_audio_level(level)
@@ -35,7 +35,7 @@ Methods CALLED by JarvisLive on ui:
     hide_confirm()
     notify_phone_connected()
     prompt_reconfig()
-    wait_for_api_key()       -- not called by JarvisLive but by the runner
+    wait_for_api_key()       -- not called by tarsLive but by the runner
 """
 from __future__ import annotations
 
@@ -52,9 +52,9 @@ class _FakeWin:
 
 
 class HeadlessUI:
-    """Drop-in replacement for JarvisUI in background/headless mode."""
+    """Drop-in replacement for tarsUI in background/headless mode."""
 
-    # -- Attributes JarvisLive sets on ui (callbacks) -------------------------
+    # -- Attributes tarsLive sets on ui (callbacks) -------------------------
     on_push_to_talk:        object = None
     ptt_hold:               object = None
     on_text_command:        object = None
@@ -71,7 +71,7 @@ class HeadlessUI:
     on_wake_manual:         object = None
     on_wake_install:        object = None
 
-    # -- Attributes READ by JarvisLive ----------------------------------------
+    # -- Attributes READ by tarsLive ----------------------------------------
     muted        = False   # headless is never muted
     current_file = None    # no file-upload in headless mode
 
@@ -90,7 +90,7 @@ class HeadlessUI:
     # -- Log output ------------------------------------------------------------
 
     def write_log(self, msg: str) -> None:
-        """Route all JarvisLive log messages to the background log file."""
+        """Route all tarsLive log messages to the background log file."""
         msg = str(msg).strip()
         if not msg:
             return

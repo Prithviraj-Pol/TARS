@@ -82,7 +82,7 @@ pynvml                       # system_monitor + the HUD's GPU meter (NVIDIA)
 #                            #   (also needs ffmpeg on PATH for most formats)
 #   pip install mediapipe    # pushup_counter: elbow-angle rep detection
 
-# ── Optional: local wake word ("Hey Jarvis") ──────────────────────────────────
+# ── Optional: local wake word ("Hey tars") ──────────────────────────────────
 # Deliberately NOT installed by default — it's opt-in. Enable it (and download
 # the tiny model) with one click from ⚙ → WAKE WORD in the app, or install it
 # yourself with:  pip install openwakeword

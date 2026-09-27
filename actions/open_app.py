@@ -260,13 +260,19 @@ def open_app(
 
     try:
         if launcher(normalized):
-            return f"Opened {app_name}."
+            return (
+                f"Application launch request sent for '{app_name}'. "
+                f"The process was started but window visibility was not verified."
+            )
         if normalized.lower() != app_name.lower():
             if launcher(app_name):
-                return f"Opened {app_name}."
+                return (
+                    f"Application launch request sent for '{app_name}'. "
+                    f"The process was started but window visibility was not verified."
+                )
         return (
-            f"Could not confirm that {app_name} launched. "
-            f"It may still be loading, or it might not be installed."
+            f"Could not launch '{app_name}'. "
+            f"It may not be installed or the launcher was unable to find its executable."
         )
     except Exception as e:
         print(f"[open_app] Error: {e}")

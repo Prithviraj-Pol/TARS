@@ -100,9 +100,25 @@ class ActionRegistry:
         rec = self._actions.get(name)
         if rec is None or not rec.valid:
             return f"Action '{name}' is not available."
+        import time as _time
+        _t0 = _time.monotonic()
+        result = None
         try:
-            return _call_handler(rec.handler, parameters, ctx or {}) or "Done."
+            result = _call_handler(rec.handler, parameters, ctx or {})
+            # NEVER treat an empty/None return as "Done" — that hides real failures.
+            # If the handler returned nothing, surface that fact explicitly so the
+            # model cannot claim success from silence.
+            if not result:
+                result = f"Action '{name}' returned no output (status unknown)."
+            _elapsed = _time.monotonic() - _t0
+            print(
+                f"[TOOL] name={name}  elapsed={_elapsed:.2f}s  "
+                f"final={'SUCCESS' if result and not result.startswith(('Error', 'Failed', 'Could not', 'Access denied', 'Not found', 'Unknown')) else 'CHECK_RESULT'}"
+            )
+            return result
         except Exception as e:
+            _elapsed = _time.monotonic() - _t0
+            print(f"[TOOL] name={name}  elapsed={_elapsed:.2f}s  final=FAILED  error={e}")
             self._logger(f"Action '{name}' crashed during run(): {e}")
             traceback.print_exc()
             return f"Tool '{name}' failed: {e}"

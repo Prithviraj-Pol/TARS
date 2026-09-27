@@ -226,6 +226,74 @@ def list_files(path: str = "desktop", show_hidden: bool = False) -> str:
         return f"Error listing files: {e}"
 
 
+def open_folder(path: str, name: str = "") -> str:
+    """Open a folder in the OS file manager.
+
+    Verifies the folder exists before attempting to open it.
+    Returns a truthful status: success means the open request was sent
+    to the OS without an exception AND the target was verified to exist.
+    It does NOT guarantee the window became the foreground window — that
+    requires window enumeration which adds latency and is unreliable across
+    desktop environments.
+    """
+    import subprocess, platform as _plat
+    try:
+        base   = _resolve_path(path)
+        target = (base / name) if name else base
+        if not _is_safe_path(target):
+            return f"Access denied: {target}"
+        if not target.exists():
+            return f"NOT_FOUND: Folder does not exist: {target}"
+        if not target.is_dir():
+            return f"NOT_FOUND: Path exists but is not a folder: {target}"
+        _os = _plat.system()
+        try:
+            if _os == "Windows":
+                import os as _os_mod
+                _os_mod.startfile(str(target))
+            elif _os == "Darwin":
+                subprocess.Popen(["open", str(target)])
+            else:
+                subprocess.Popen(["xdg-open", str(target)])
+        except Exception as e:
+            return f"Folder exists but open request failed: {target}  Error: {e}"
+        return f"Folder open request sent successfully: {target}"
+    except Exception as e:
+        return f"Could not open folder: {e}"
+
+
+def open_file(path: str, name: str = "") -> str:
+    """Open a file with its default application.
+
+    Verifies the file exists before attempting to open it.
+    Returns a truthful status.
+    """
+    import subprocess, platform as _plat
+    try:
+        base   = _resolve_path(path)
+        target = (base / name) if name else base
+        if not _is_safe_path(target):
+            return f"Access denied: {target}"
+        if not target.exists():
+            return f"NOT_FOUND: File does not exist: {target}"
+        if not target.is_file():
+            return f"NOT_FOUND: Path exists but is not a file: {target}"
+        _os = _plat.system()
+        try:
+            if _os == "Windows":
+                import os as _os_mod
+                _os_mod.startfile(str(target))
+            elif _os == "Darwin":
+                subprocess.Popen(["open", str(target)])
+            else:
+                subprocess.Popen(["xdg-open", str(target)])
+        except Exception as e:
+            return f"File exists but open request failed: {target}  Error: {e}"
+        return f"File open request sent successfully: {target}"
+    except Exception as e:
+        return f"Could not open file: {e}"
+
+
 def create_file(path: str, name: str = "", content: str = "") -> str:
     try:
         base   = _resolve_path(path)
@@ -243,7 +311,10 @@ def create_file(path: str, name: str = "", content: str = "") -> str:
         target.write_text(content, encoding="utf-8")
         push_undo(f"created {target.name}",
                   _undo_write(target, previous) if existed else _undo_create(target))
-        return f"File created: {target.name}"
+        # Verify creation actually succeeded
+        if target.exists() and target.is_file():
+            return f"File created successfully: {target}"
+        return f"File creation failed (path does not exist after write): {target}"
     except Exception as e:
         return f"Could not create file: {e}"
 
@@ -255,13 +326,14 @@ def create_folder(path: str, name: str = "") -> str:
         if not _is_safe_path(target):
             return f"Access denied: {target}"
         already = target.exists()
+        if already and target.is_dir():
+            return f"ALREADY_EXISTS: Folder already exists: {target}"
         target.mkdir(parents=True, exist_ok=True)
-        # Only offer to undo a folder we actually made. "mkdir -p" on something
-        # that was already there is not a change, and undoing it would delete a
-        # directory the user has had for years.
-        if not already:
+        # Verify creation
+        if target.exists() and target.is_dir():
             push_undo(f"created folder {target.name}", _undo_create(target))
-        return f"Folder created: {target.name}"
+            return f"Folder created successfully: {target}"
+        return f"Folder creation failed (path does not exist after mkdir): {target}"
     except Exception as e:
         return f"Could not create folder: {e}"
 
@@ -714,6 +786,12 @@ def file_controller(
         elif action == "info":
             return get_file_info(path, name=name)
 
+        elif action == "open_folder":
+            return open_folder(path, name=name)
+
+        elif action == "open_file":
+            return open_file(path, name=name)
+
         else:
             return f"Unknown action: '{action}'"
 
@@ -730,7 +808,7 @@ TOOL = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "list | create_file | create_folder | delete | move | copy | rename | read | write | find | largest | disk_usage | organize_desktop | info"
+                "description": "list | create_file | create_folder | open_folder | open_file | delete | move | copy | rename | read | write | find | largest | disk_usage | organize_desktop | info"
             },
             "path": {
                 "type": "STRING",
