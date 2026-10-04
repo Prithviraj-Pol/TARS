@@ -1,3 +1,5 @@
+import os
+import re
 import time
 import subprocess
 import platform
@@ -8,6 +10,19 @@ try:
     _PSUTIL = True
 except ImportError:
     _PSUTIL = False
+
+from core.app_verifier import (
+    STATE_ALREADY_OPEN,
+    STATE_FAILED,
+    STATE_LAUNCH_IN_PROGRESS,
+    STATE_NOT_VERIFIED,
+    STATE_SUCCESS,
+    AppLaunchGuard,
+    is_app_already_open,
+    is_launch_in_progress,
+    normalize_app,
+    verify_app_launched,
+)
 
 _SYSTEM = platform.system()
 
@@ -77,8 +92,40 @@ def _normalize(raw: str) -> str:
 
     return raw  
 
-def _launch_windows(app_name: str) -> bool:
+def _get_windows_app_path(app_name: str) -> str | None:
+    """Check Windows Registry App Paths for registered executables."""
+    app_name_exe = app_name if app_name.lower().endswith(".exe") else f"{app_name}.exe"
+    try:
+        import winreg
+        for root in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+            try:
+                key = winreg.OpenKey(
+                    root,
+                    rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{app_name_exe}"
+                )
+                val, _ = winreg.QueryValueEx(key, "")
+                winreg.CloseKey(key)
+                if val and os.path.exists(val):
+                    return val
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return None
 
+
+def _launch_windows(app_name: str) -> bool:
+    # 1. Registry App Paths
+    reg_path = _get_windows_app_path(app_name)
+    if reg_path:
+        try:
+            subprocess.Popen([reg_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(1.0)
+            return True
+        except Exception as e:
+            print(f"[open_app] Launch via App Paths failed: {e}")
+
+    # 2. PATH lookup
     if shutil.which(app_name) or shutil.which(app_name.split(".")[0]):
         try:
             subprocess.Popen(
@@ -87,11 +134,12 @@ def _launch_windows(app_name: str) -> bool:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            time.sleep(1.5)
+            time.sleep(1.0)
             return True
         except Exception as e:
             print(f"[open_app] subprocess failed: {e}")
 
+    # 3. URI schemes (e.g. ms-settings:)
     if ":" in app_name:
         try:
             subprocess.Popen(f"start {app_name}", shell=True)
@@ -100,6 +148,7 @@ def _launch_windows(app_name: str) -> bool:
         except Exception:
             pass
 
+    # 4. Fallback: Start Menu search
     try:
         import pyautogui
         pyautogui.PAUSE = 0.1
@@ -108,7 +157,7 @@ def _launch_windows(app_name: str) -> bool:
         pyautogui.write(app_name, interval=0.05)
         time.sleep(0.9)
         pyautogui.press("enter")
-        time.sleep(2.5)
+        time.sleep(2.0)
         return True
     except Exception as e:
         print(f"[open_app] Start Menu search failed: {e}")
@@ -243,40 +292,101 @@ def open_app(
     player=None,
     session_memory=None,
 ) -> str:
-    app_name = (parameters or {}).get("app_name", "").strip()
+    raw_app_name = (parameters or {}).get("app_name", "").strip()
 
-    if not app_name:
+    if not raw_app_name:
         return "No application name provided."
+
+    print(f"TOOL: open_application({raw_app_name})")
+    if player:
+        player.write_log(f"TOOL: open_application({raw_app_name})")
 
     launcher = _OS_LAUNCHERS.get(_SYSTEM)
     if launcher is None:
         return f"Unsupported operating system: {_SYSTEM}"
 
-    normalized = _normalize(app_name)
-    print(f"[open_app] Launching: '{app_name}' → '{normalized}' ({_SYSTEM})")
+    # Handle multiple apps requested together (e.g. "Chrome, VS Code")
+    if "," in raw_app_name or " and " in raw_app_name.lower():
+        sub_apps = [
+            a.strip() for a in re.split(r",|\band\b", raw_app_name, flags=re.IGNORECASE) if a.strip()
+        ]
+        if len(sub_apps) > 1:
+            results = []
+            for sub_app in sub_apps:
+                sub_res = open_app({"app_name": sub_app}, response, player, session_memory)
+                results.append(sub_res)
+            return "\n".join(results)
 
-    if player:
-        player.write_log(f"[open_app] {app_name}")
-
-    try:
-        if launcher(normalized):
-            return (
-                f"Application launch request sent for '{app_name}'. "
-                f"The process was started but window visibility was not verified."
-            )
-        if normalized.lower() != app_name.lower():
-            if launcher(app_name):
-                return (
-                    f"Application launch request sent for '{app_name}'. "
-                    f"The process was started but window visibility was not verified."
-                )
+    # Check for vague group commands
+    if raw_app_name.lower() in ("my pc apps", "pc apps", "my apps"):
         return (
-            f"Could not launch '{app_name}'. "
-            f"It may not be installed or the launcher was unable to find its executable."
+            "FAILED: Please specify which PC application you would like to open "
+            "(e.g., Chrome, VS Code, File Explorer, Terminal)."
         )
+
+    canonical, _, _, _ = normalize_app(raw_app_name)
+
+    # 1. Idempotency check: Check whether the application is already open
+    already_open, reason, meta = is_app_already_open(raw_app_name)
+    if already_open:
+        detect_type = meta.get("type", "process")
+        if detect_type == "window":
+            print(f"TOOL: {canonical} window detected")
+        else:
+            print(f"TOOL: {canonical} process detected")
+        print("TOOL: APP_ALREADY_OPEN")
+        if player:
+            player.write_log(f"TOOL: {canonical} — APP_ALREADY_OPEN")
+        return f"APP_ALREADY_OPEN: '{canonical}' is already open and running ({reason})."
+
+    # 2. Check whether a launch is already in progress
+    if is_launch_in_progress(canonical):
+        print(f"TOOL: launch in progress for {canonical}")
+        return f"{STATE_LAUNCH_IN_PROGRESS}: '{canonical}' is currently being launched."
+
+    # 3. Launch application with thread-safe execution lock
+    normalized = _normalize(raw_app_name)
+    try:
+        with AppLaunchGuard(canonical):
+            print("TOOL: execution lock acquired")
+            print(f"TOOL: launching {canonical}")
+            if player:
+                player.write_log(f"TOOL: launching {canonical}")
+
+            launched = launcher(normalized)
+            if not launched and normalized.lower() != raw_app_name.lower():
+                launched = launcher(raw_app_name)
+
+            if not launched:
+                print(f"TOOL: FAILED to launch {canonical}")
+                return (
+                    f"FAILED: Could not launch '{raw_app_name}'. "
+                    f"It may not be installed or executable was not found."
+                )
+
+            # 4. Verify application launch state
+            verified, verify_detail = verify_app_launched(raw_app_name, timeout_seconds=3.5)
+            if verified:
+                print(f"TOOL: {canonical} launch verified")
+                print("TOOL: SUCCESS")
+                if player:
+                    player.write_log(f"TOOL: {canonical} — SUCCESS")
+                return f"SUCCESS: Application '{canonical}' was launched and verified running ({verify_detail})."
+            else:
+                print(f"TOOL: {canonical} launch could not be verified")
+                print("TOOL: NOT_VERIFIED")
+                if player:
+                    player.write_log(f"TOOL: {canonical} — NOT_VERIFIED")
+                return (
+                    f"NOT_VERIFIED: Launch request was sent for '{canonical}', "
+                    f"but process or window was not detected within timeout."
+                )
+
+    except RuntimeError as re_err:
+        return str(re_err)
     except Exception as e:
         print(f"[open_app] Error: {e}")
-        return f"Failed to open {app_name}: {e}"
+        return f"FAILED: Failed to open {raw_app_name}: {e}"
 
 
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────

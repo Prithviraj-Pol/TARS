@@ -71,6 +71,7 @@ from actions.web_search        import _news as _fetch_news_sync
 from memory.config_manager     import (
     get_brief_enabled, get_media_resolution, get_proactive_audio_enabled,
     get_push_to_talk_enabled, get_thinking_enabled, get_turn_tuning, get_voice,
+    TARS_VOICE,
     get_wake_word_enabled, save_wake_word_enabled,    get_input_device, get_output_device,
 )
 from core.plugin_loader        import discover_plugins
@@ -80,6 +81,7 @@ from core                      import audio_devices
 from core.action_loader        import discover_actions
 from core.echo                 import EchoGuard
 from core.viseme               import VisemeStream
+from core.execution_guard      import ExecutionGuard
 from core.wake_word            import (
     WakeWordDetector, is_ready as wake_is_ready, install_and_download as wake_install,
 )
@@ -656,6 +658,19 @@ class tarsLive:
         self.ui.on_wake_manual   = self._ui_wake_manual   # () -> toggle awake/asleep
         self.ui.on_wake_install  = self._ui_wake_install  # () -> (ok, msg)
 
+        # ── Execution Guard & Tool Deduplication ────────────────────────────
+        self._execution_guard = ExecutionGuard(
+            cooldown_seconds=4.0,
+            logger=lambda msg: print(msg),
+            ui_logger=lambda msg: self.ui.write_log(msg),
+        )
+        self._awaiting_user_speech = True
+
+        # ── Permanent Male Voice Locked ─────────────────────────────────────
+        self._locked_voice = get_voice()
+        self.ui.write_log("SYS: TARS male voice locked.")
+        print(f"[tars] [SYS] SYS: TARS male voice locked (voice: {self._locked_voice}).")
+
     # ── Wake word: state machine ─────────────────────────────────────────────
 
     def _wake_state(self) -> dict:
@@ -685,6 +700,8 @@ class tarsLive:
             return
         self._awake = True
         self._last_user_speech = time.monotonic()   # start the auto-sleep clock now
+        self._execution_guard.new_user_request(source=f"wake_{reason}")
+        self._awaiting_user_speech = False
         if not self.ui.muted:
             self.ui.set_state("LISTENING")
         self.ui.write_log(f"SYS: Awake — {reason}.")
@@ -704,8 +721,11 @@ class tarsLive:
                 else:
                     import win32com.client
                     sapi = win32com.client.Dispatch("SAPI.SpVoice")
-                    if sapi.GetVoices().Count > 0:
-                        sapi.Voice = sapi.GetVoices().Item(0)
+                    for v in sapi.GetVoices():
+                        desc = v.GetDescription().lower()
+                        if any(m in desc for m in ("david", "mark", "george", "male")):
+                            sapi.Voice = v
+                            break
                     sapi.Rate = 2
                     sapi.Speak("Yes, sir?", 0)
             except Exception:
@@ -873,6 +893,9 @@ class tarsLive:
             else:
                 self.ui.write_log("SYS: I'm asleep — tap WAKE NOW first.")
             return
+
+        self._execution_guard.new_user_request(source="text_command")
+        self._awaiting_user_speech = False
         asyncio.run_coroutine_threadsafe(
             self.session.send_client_content(
                 turns={"role": "user", "parts": [{"text": text}]},
@@ -1148,11 +1171,30 @@ class tarsLive:
 
     async def _execute_tool(self, fc) -> types.FunctionResponse:
         name = fc.name
+        if name == "open_application":
+            name = "open_app"
         args = dict(fc.args or {})
+        fc_id = getattr(fc, "id", None) or f"{name}_{time.monotonic()}"
 
+        # ── Execution Guard: Deduplication & Replay Protection ─────────────
+        is_dup, dup_reason, cached_res = self._execution_guard.check_duplicate(fc_id, name, args)
+        if is_dup:
+            print(f"[tars] [GUARD] TOOL: duplicate request ignored: {name}({args}) -> {dup_reason}")
+            self.ui.write_log(f"TOOL: duplicate request ignored: {name}")
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            _sched = (self._action_registry.scheduling(name)
+                      or self._plugin_registry.scheduling(name))
+            _extra = {"scheduling": _sched} if _sched else {}
+            return types.FunctionResponse(
+                id=fc.id, name=fc.name,
+                response={"result": cached_res or dup_reason},
+                **_extra
+            )
+
+        self._execution_guard.record_start(name, args)
         print(f"[tars] 🔧 {name}  {args}")
         self.ui.set_state("THINKING")
-
 
         if name == "save_memory":
             category = args.get("category", "notes")
@@ -2323,3 +2365,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    

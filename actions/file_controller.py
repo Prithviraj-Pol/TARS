@@ -11,6 +11,7 @@ except ImportError:
     _SEND2TRASH = False
 
 from core.undo import push_undo
+from core.app_verifier import is_folder_open, is_file_open
 
 _OS = platform.system()  # "Windows" | "Darwin" | "Linux"
 
@@ -227,16 +228,8 @@ def list_files(path: str = "desktop", show_hidden: bool = False) -> str:
 
 
 def open_folder(path: str, name: str = "") -> str:
-    """Open a folder in the OS file manager.
-
-    Verifies the folder exists before attempting to open it.
-    Returns a truthful status: success means the open request was sent
-    to the OS without an exception AND the target was verified to exist.
-    It does NOT guarantee the window became the foreground window — that
-    requires window enumeration which adds latency and is unreliable across
-    desktop environments.
-    """
-    import subprocess, platform as _plat
+    """Open a folder in the OS file manager with idempotency and verification."""
+    import subprocess, platform as _plat, time as _time
     try:
         base   = _resolve_path(path)
         target = (base / name) if name else base
@@ -246,6 +239,14 @@ def open_folder(path: str, name: str = "") -> str:
             return f"NOT_FOUND: Folder does not exist: {target}"
         if not target.is_dir():
             return f"NOT_FOUND: Path exists but is not a folder: {target}"
+
+        # 1. Idempotency check: check if folder is already open
+        is_open, open_reason = is_folder_open(target)
+        if is_open:
+            print(f"TOOL: Folder '{target.name}' window detected")
+            print("TOOL: APP_ALREADY_OPEN")
+            return f"ALREADY_OPEN: Folder '{target.name}' is already open ({open_reason})."
+
         _os = _plat.system()
         try:
             if _os == "Windows":
@@ -256,19 +257,25 @@ def open_folder(path: str, name: str = "") -> str:
             else:
                 subprocess.Popen(["xdg-open", str(target)])
         except Exception as e:
-            return f"Folder exists but open request failed: {target}  Error: {e}"
-        return f"Folder open request sent successfully: {target}"
+            return f"FAILED: Folder exists but open request failed: {target}  Error: {e}"
+
+        # 2. Verification polling
+        for _ in range(8):
+            _time.sleep(0.3)
+            opened, _ = is_folder_open(target)
+            if opened:
+                print(f"TOOL: Folder '{target.name}' open verified")
+                print("TOOL: SUCCESS")
+                return f"SUCCESS: Folder '{target.name}' opened and verified."
+
+        return f"SUCCESS: Folder open request sent successfully: {target}"
     except Exception as e:
-        return f"Could not open folder: {e}"
+        return f"FAILED: Could not open folder: {e}"
 
 
 def open_file(path: str, name: str = "") -> str:
-    """Open a file with its default application.
-
-    Verifies the file exists before attempting to open it.
-    Returns a truthful status.
-    """
-    import subprocess, platform as _plat
+    """Open a file with its default application with idempotency and verification."""
+    import subprocess, platform as _plat, time as _time
     try:
         base   = _resolve_path(path)
         target = (base / name) if name else base
@@ -278,6 +285,14 @@ def open_file(path: str, name: str = "") -> str:
             return f"NOT_FOUND: File does not exist: {target}"
         if not target.is_file():
             return f"NOT_FOUND: Path exists but is not a file: {target}"
+
+        # 1. Idempotency check: check if file is already open
+        is_open, open_reason = is_file_open(target)
+        if is_open:
+            print(f"TOOL: File '{target.name}' window detected")
+            print("TOOL: APP_ALREADY_OPEN")
+            return f"ALREADY_OPEN: File '{target.name}' is already open ({open_reason})."
+
         _os = _plat.system()
         try:
             if _os == "Windows":
@@ -288,10 +303,20 @@ def open_file(path: str, name: str = "") -> str:
             else:
                 subprocess.Popen(["xdg-open", str(target)])
         except Exception as e:
-            return f"File exists but open request failed: {target}  Error: {e}"
-        return f"File open request sent successfully: {target}"
+            return f"FAILED: File exists but open request failed: {target}  Error: {e}"
+
+        # 2. Verification polling
+        for _ in range(8):
+            _time.sleep(0.3)
+            opened, _ = is_file_open(target)
+            if opened:
+                print(f"TOOL: File '{target.name}' open verified")
+                print("TOOL: SUCCESS")
+                return f"SUCCESS: File '{target.name}' opened and verified."
+
+        return f"SUCCESS: File open request sent successfully: {target}"
     except Exception as e:
-        return f"Could not open file: {e}"
+        return f"FAILED: Could not open file: {e}"
 
 
 def create_file(path: str, name: str = "", content: str = "") -> str:
@@ -300,8 +325,17 @@ def create_file(path: str, name: str = "", content: str = "") -> str:
         target = (base / name) if name else base
         if not _is_safe_path(target):
             return f"Access denied: {target}"
-        target.parent.mkdir(parents=True, exist_ok=True)
+
         existed = target.exists()
+        if existed and target.is_file():
+            try:
+                existing_content = target.read_text(encoding="utf-8", errors="ignore")
+                if existing_content == content:
+                    return f"ALREADY_EXISTS: File '{target.name}' already exists with identical content."
+            except Exception:
+                return f"ALREADY_EXISTS: File '{target.name}' already exists: {target}"
+
+        target.parent.mkdir(parents=True, exist_ok=True)
         previous = None
         if existed:
             try:
@@ -313,10 +347,10 @@ def create_file(path: str, name: str = "", content: str = "") -> str:
                   _undo_write(target, previous) if existed else _undo_create(target))
         # Verify creation actually succeeded
         if target.exists() and target.is_file():
-            return f"File created successfully: {target}"
-        return f"File creation failed (path does not exist after write): {target}"
+            return f"SUCCESS: File '{target.name}' created successfully: {target}"
+        return f"FAILED: File creation failed (path does not exist after write): {target}"
     except Exception as e:
-        return f"Could not create file: {e}"
+        return f"FAILED: Could not create file: {e}"
 
 
 def create_folder(path: str, name: str = "") -> str:
@@ -327,15 +361,15 @@ def create_folder(path: str, name: str = "") -> str:
             return f"Access denied: {target}"
         already = target.exists()
         if already and target.is_dir():
-            return f"ALREADY_EXISTS: Folder already exists: {target}"
+            return f"ALREADY_EXISTS: Folder '{target.name}' already exists: {target}"
         target.mkdir(parents=True, exist_ok=True)
         # Verify creation
         if target.exists() and target.is_dir():
             push_undo(f"created folder {target.name}", _undo_create(target))
-            return f"Folder created successfully: {target}"
-        return f"Folder creation failed (path does not exist after mkdir): {target}"
+            return f"SUCCESS: Folder '{target.name}' created successfully: {target}"
+        return f"FAILED: Folder creation failed (path does not exist after mkdir): {target}"
     except Exception as e:
-        return f"Could not create folder: {e}"
+        return f"FAILED: Could not create folder: {e}"
 
 
 def delete_file(path: str, name: str = "") -> str:

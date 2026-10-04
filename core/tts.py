@@ -223,7 +223,12 @@ class KokoroTTSEngine:
     the first real speak() call has zero compilation overhead.
     """
 
-    def __init__(self, voice: str = "af_heart", speed: float = 1.0):
+    def __init__(self, voice: str = "am_michael", speed: float = 1.0):
+        # TARS is locked to a male voice — convert female prefixes (af_/bf_) to male (am_/bm_)
+        if voice.startswith("af_"):
+            voice = "am_" + voice[3:] if voice != "af_heart" else "am_michael"
+        elif voice.startswith("bf_"):
+            voice = "bm_" + voice[3:]
         self.voice     = voice
         self.speed     = speed
         self._pipeline = None
@@ -429,14 +434,20 @@ class TTSPlayer:
 def create_tts_player(config: dict) -> TTSPlayer:
     engine_name = config.get("tts_engine", "edgetts").lower()
     if engine_name == "kokoro":
-        voice  = config.get("tts_voice", "af_heart")
+        voice  = config.get("tts_voice", "am_michael")
+        if voice.startswith("af_") or voice.startswith("bf_"):
+            voice = "am_michael"
         speed  = float(config.get("tts_speed", 1.0))
         engine = KokoroTTSEngine(voice=voice, speed=speed)
     elif engine_name == "elevenlabs":
         api_key  = config.get("elevenlabs_api_key", "")
+        # Adam male voice ID
         voice_id = config.get("tts_voice", "pNInz6obpgDQGcFmaJgB")
         engine   = ElevenLabsTTSEngine(api_key=api_key, voice_id=voice_id)
     else:   # edgetts (default)
+        # GuyNeural male voice
         voice  = config.get("tts_voice", "en-US-GuyNeural")
+        if "aria" in voice.lower() or "jenny" in voice.lower():
+            voice = "en-US-GuyNeural"
         engine = EdgeTTSEngine(voice=voice)
     return TTSPlayer(engine)

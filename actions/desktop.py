@@ -95,7 +95,7 @@ def _execute_generated_code(code: str, player=None) -> str:
 
     try:
         exec(compile(code, "<tars_desktop>", "exec"), sandbox)
-        return "\n".join(output_lines) if output_lines else "Done."
+        return "\n".join(output_lines) if output_lines else "SUCCESS: Desktop task executed successfully."
     except Exception as e:
         print(f"[Desktop] Exec error: {e}\nCode:\n{code[:300]}")
         return f"Execution error: {e}"
@@ -412,6 +412,50 @@ def get_desktop_stats() -> str:
         f"  Path    : {desktop}"
     )
 
+def create_desktop_shortcut(player=None) -> str:
+    """Create a desktop shortcut to TARS with strict idempotency."""
+    desktop = _get_desktop()
+    if _OS == "Windows":
+        lnk_tars = desktop / "TARS.lnk"
+        lnk_jarvis = desktop / "J.A.R.V.I.S.lnk"
+        if lnk_tars.exists() or lnk_jarvis.exists():
+            return "ALREADY_EXISTS: Desktop shortcut already exists."
+
+        script = _get_base_dir() / "main.py"
+        python = Path(sys.executable)
+        pythonw = python.parent / "pythonw.exe"
+        target = str(pythonw if pythonw.exists() else python)
+        ico_path = _get_base_dir() / "config" / "tars.ico"
+        icon_loc = str(ico_path) if ico_path.exists() else f"{target},0"
+
+        try:
+            from win32com.client import Dispatch
+            sh = Dispatch("WScript.Shell")
+            sc = sh.CreateShortCut(str(lnk_tars))
+            sc.TargetPath = target
+            sc.Arguments = f'"{script}"'
+            sc.WorkingDirectory = str(script.parent)
+            sc.IconLocation = icon_loc
+            sc.Description = "TARS AI Assistant"
+            sc.Save()
+            if lnk_tars.exists():
+                return f"SUCCESS: Desktop shortcut created: {lnk_tars.name}"
+            return "FAILED: Shortcut file was not created."
+        except Exception as e:
+            return f"FAILED: Could not create desktop shortcut: {e}"
+
+    elif _OS == "Darwin":
+        app = desktop / "TARS.app"
+        if app.exists():
+            return "ALREADY_EXISTS: Desktop shortcut already exists."
+        return "FAILED: macOS shortcut creation requires UI setup."
+    else:
+        desk = desktop / "TARS.desktop"
+        if desk.exists():
+            return "ALREADY_EXISTS: Desktop shortcut already exists."
+        return "FAILED: Linux shortcut creation requires UI setup."
+
+
 def desktop_control(
     parameters: dict = None,
     response=None,
@@ -421,7 +465,7 @@ def desktop_control(
     """
     parameters:
         action : wallpaper | wallpaper_url | current_wallpaper |
-                 organize  | clean | list | stats |
+                 organize  | clean | list | stats | shortcut |
                  task (AI-powered)
         path   : image path for 'wallpaper'
         url    : image URL for 'wallpaper_url'
@@ -436,6 +480,9 @@ def desktop_control(
         player.write_log(f"[desktop] {action or task[:40]}")
 
     try:
+        if action in ("shortcut", "create_shortcut", "desktop_shortcut"):
+            return create_desktop_shortcut(player=player)
+
         if action == "wallpaper":
             path = params.get("path", "")
             return set_wallpaper(path) if path else "No image path provided."
@@ -463,6 +510,9 @@ def desktop_control(
             actual_task = task or params.get("description", "")
             if not actual_task:
                 return "Please describe what you want to do on the desktop."
+
+            if "shortcut" in actual_task.lower() and any(w in actual_task.lower() for w in ("create", "make", "add", "desktop")):
+                return create_desktop_shortcut(player=player)
 
             print(f"[Desktop] Asking Gemini: {actual_task}")
             if player:

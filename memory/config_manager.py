@@ -76,22 +76,23 @@ def save_assistant_config(assistant_name: str, user_name: str) -> None:
 
 
 # ── Assistant voice ──────────────────────────────────────────────────────────
-# Gemini Live prebuilt voices. Names are proper nouns — identical in every
-# language, so this list is safe to show verbatim in any locale.
-AVAILABLE_VOICES = ["Charon", "Puck", "Kore", "Fenrir", "Aoede"]
-DEFAULT_VOICE    = "Charon"
+# Gemini Live prebuilt male voices. TARS is permanently locked to a male voice.
+# Supported Gemini male voices: "Charon" (deep, calm), "Fenrir" (deep, authoritative), "Puck" (upbeat).
+TARS_VOICE       = "Charon"
+MALE_VOICES      = ("Charon", "Fenrir", "Puck")
+AVAILABLE_VOICES = ["Charon", "Fenrir", "Puck"]
+DEFAULT_VOICE    = TARS_VOICE
 
 
 def get_voice() -> str:
-    """Return the configured Live voice, falling back to the default if unset
-    or if the stored value is not a voice we recognise."""
-    v = load_api_keys().get("voice_name", DEFAULT_VOICE) or DEFAULT_VOICE
-    return v if v in AVAILABLE_VOICES else DEFAULT_VOICE
+    """Return the configured Live male voice. Permanently locked to a male voice.
+    Female voices or unknown values automatically collapse to TARS_VOICE."""
+    v = load_api_keys().get("voice_name", TARS_VOICE) or TARS_VOICE
+    return v if v in MALE_VOICES else TARS_VOICE
 
 
 def save_voice(voice_name: str) -> None:
-    """Persist the chosen Live voice. Unknown names collapse to the default so a
-    bad value can never reach the API and break the session."""
+    """Persist the chosen Live voice. Female or unknown names collapse to TARS_VOICE."""
     ensure_config_dir()
     data: dict = {}
     if CONFIG_FILE.exists():
@@ -100,7 +101,7 @@ def save_voice(voice_name: str) -> None:
         except Exception:
             data = {}
     v = (voice_name or "").strip()
-    data["voice_name"] = v if v in AVAILABLE_VOICES else DEFAULT_VOICE
+    data["voice_name"] = v if v in MALE_VOICES else TARS_VOICE
     CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
 
 
