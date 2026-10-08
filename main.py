@@ -1205,6 +1205,7 @@ class tarsLive:
                 print(f"[Memory] 💾 save_memory: {category}/{key} = {value}")
             if not self.ui.muted:
                 self.ui.set_state("LISTENING")
+            self._execution_guard.record_finish(fc_id, name, args, "ok")
             return types.FunctionResponse(
                 id=fc.id, name=name,
                 response={"result": "ok", "silent": True}
@@ -1352,6 +1353,7 @@ class tarsLive:
         _sched = (self._action_registry.scheduling(name)
                   or self._plugin_registry.scheduling(name))
         _extra = {"scheduling": _sched} if _sched else {}
+        self._execution_guard.record_finish(fc_id, name, args, result)
         return types.FunctionResponse(
             id=fc.id, name=name,
             response={"result": result},
@@ -1593,10 +1595,13 @@ class tarsLive:
                         if sc.input_transcription and sc.input_transcription.text:
                             txt = _clean_transcript(sc.input_transcription.text)
                             if txt:
+                                if not in_buf:
+                                    self._execution_guard.new_user_request(source="user_speech")
                                 in_buf.append(txt)
                                 self._last_user_speech = time.monotonic()
 
                         if sc.turn_complete:
+                            self._awaiting_user_speech = True
                             if self._turn_done_event:
                                 self._turn_done_event.set()
 

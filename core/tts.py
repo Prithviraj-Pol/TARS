@@ -11,7 +11,7 @@ import asyncio
 import os
 import queue as _queue
 import threading
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 import sounddevice as sd
@@ -87,7 +87,7 @@ def _play_np(samples, sample_rate: int) -> None:
 
 def _play_audio_bytes(audio_bytes: bytes) -> None:
     """Decode MP3/WAV/OGG bytes and play via sounddevice (uses miniaudio)."""
-    import miniaudio
+    import miniaudio  # type: ignore
     decoded = miniaudio.decode(
         audio_bytes,
         output_format=miniaudio.SampleFormat.FLOAT32,
@@ -118,7 +118,7 @@ class EdgeTTSEngine:
             _play_audio_bytes(audio_bytes)
 
     async def _synth(self, text: str) -> bytes:
-        import edge_tts
+        import edge_tts  # type: ignore
         comm = edge_tts.Communicate(text, self.voice)
         buf  = bytearray()
         async for chunk in comm.stream():
@@ -151,7 +151,7 @@ def _import_kokoro_pipeline():
     import sys
 
     def _try_import():
-        from kokoro import KPipeline  # noqa: PLC0415
+        from kokoro import KPipeline  # type: ignore
         return KPipeline
 
     try:
@@ -231,7 +231,7 @@ class KokoroTTSEngine:
             voice = "bm_" + voice[3:]
         self.voice     = voice
         self.speed     = speed
-        self._pipeline = None
+        self._pipeline: Any = None
         self._lock     = threading.Lock()
         self._init()   # blocking, but called from background thread
 
@@ -248,7 +248,7 @@ class KokoroTTSEngine:
 
         # Prefer GPU — Kokoro on CUDA is ~10x faster than CPU.
         try:
-            import torch
+            import torch  # type: ignore
             device = "cuda" if torch.cuda.is_available() else "cpu"
             if device == "cpu":
                 import os as _os
@@ -306,8 +306,9 @@ class KokoroTTSEngine:
         print("[TTS] Kokoro compiling (first-time only)…")
         # Warmup: compiles PyTorch JIT graph so first real speak() call is instant.
         try:
-            for _ in self._pipeline("hello", voice=self.voice, speed=self.speed):
-                pass
+            if self._pipeline is not None:
+                for _ in self._pipeline("hello", voice=self.voice, speed=self.speed):
+                    pass
             print("[TTS] Kokoro ready.")
         except Exception as e:
             print(f"[TTS] Kokoro warmup warning: {e}")
@@ -316,6 +317,10 @@ class KokoroTTSEngine:
         with self._lock:
             if self._pipeline is None:
                 self._init()
+
+        pipeline = self._pipeline
+        if pipeline is None:
+            return
 
         # ── Concurrent synthesise + playback ────────────────────────────────
         # Kokoro generates audio chunks lazily.  Without threading, we:
@@ -328,7 +333,7 @@ class KokoroTTSEngine:
 
         def _synth():
             try:
-                for _, _, audio in self._pipeline(text, voice=self.voice, speed=self.speed):
+                for _, _, audio in pipeline(text, voice=self.voice, speed=self.speed):
                     if audio is not None:
                         arr = _to_numpy(audio)
                         arr = _compress_silence(arr)

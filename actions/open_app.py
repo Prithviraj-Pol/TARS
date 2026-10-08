@@ -292,7 +292,12 @@ def open_app(
     player=None,
     session_memory=None,
 ) -> str:
-    raw_app_name = (parameters or {}).get("app_name", "").strip()
+    if isinstance(parameters, str):
+        raw_app_name = parameters.strip()
+    elif isinstance(parameters, dict):
+        raw_app_name = (parameters or {}).get("app_name", "").strip()
+    else:
+        raw_app_name = ""
 
     if not raw_app_name:
         return "No application name provided."

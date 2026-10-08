@@ -412,47 +412,64 @@ def get_desktop_stats() -> str:
         f"  Path    : {desktop}"
     )
 
-def create_desktop_shortcut(player=None) -> str:
-    """Create a desktop shortcut to TARS with strict idempotency."""
+def create_desktop_shortcut(target_path=None, name=None, player=None) -> str:
+    """Create a desktop shortcut with strict idempotency."""
     desktop = _get_desktop()
     if _OS == "Windows":
-        lnk_tars = desktop / "TARS.lnk"
-        lnk_jarvis = desktop / "J.A.R.V.I.S.lnk"
-        if lnk_tars.exists() or lnk_jarvis.exists():
-            return "ALREADY_EXISTS: Desktop shortcut already exists."
+        shortcut_name = name or "TARS"
+        lnk_file = desktop / f"{shortcut_name}.lnk"
+        if lnk_file.exists():
+            return f"ALREADY_EXISTS: Desktop shortcut already exists: {lnk_file.name}"
+        if not name:
+            lnk_jarvis = desktop / "J.A.R.V.I.S.lnk"
+            if lnk_jarvis.exists():
+                return "ALREADY_EXISTS: Desktop shortcut already exists."
 
-        script = _get_base_dir() / "main.py"
-        python = Path(sys.executable)
-        pythonw = python.parent / "pythonw.exe"
-        target = str(pythonw if pythonw.exists() else python)
-        ico_path = _get_base_dir() / "config" / "tars.ico"
-        icon_loc = str(ico_path) if ico_path.exists() else f"{target},0"
+        if target_path:
+            target = str(target_path)
+            args = ""
+            work_dir = str(Path(target_path).parent)
+            icon_loc = f"{target},0"
+            desc = f"Shortcut to {shortcut_name}"
+        else:
+            script = _get_base_dir() / "main.py"
+            python = Path(sys.executable)
+            pythonw = python.parent / "pythonw.exe"
+            target = str(pythonw if pythonw.exists() else python)
+            args = f'"{script}"'
+            work_dir = str(script.parent)
+            ico_path = _get_base_dir() / "config" / "tars.ico"
+            icon_loc = str(ico_path) if ico_path.exists() else f"{target},0"
+            desc = "TARS AI Assistant"
 
         try:
             from win32com.client import Dispatch
             sh = Dispatch("WScript.Shell")
-            sc = sh.CreateShortCut(str(lnk_tars))
+            sc = sh.CreateShortCut(str(lnk_file))
             sc.TargetPath = target
-            sc.Arguments = f'"{script}"'
-            sc.WorkingDirectory = str(script.parent)
+            if args:
+                sc.Arguments = args
+            sc.WorkingDirectory = work_dir
             sc.IconLocation = icon_loc
-            sc.Description = "TARS AI Assistant"
+            sc.Description = desc
             sc.Save()
-            if lnk_tars.exists():
-                return f"SUCCESS: Desktop shortcut created: {lnk_tars.name}"
+            if lnk_file.exists():
+                return f"SUCCESS: Desktop shortcut created: {lnk_file.name}"
             return "FAILED: Shortcut file was not created."
         except Exception as e:
             return f"FAILED: Could not create desktop shortcut: {e}"
 
     elif _OS == "Darwin":
-        app = desktop / "TARS.app"
+        shortcut_name = name or "TARS"
+        app = desktop / f"{shortcut_name}.app"
         if app.exists():
-            return "ALREADY_EXISTS: Desktop shortcut already exists."
+            return f"ALREADY_EXISTS: Desktop shortcut already exists: {app.name}"
         return "FAILED: macOS shortcut creation requires UI setup."
     else:
-        desk = desktop / "TARS.desktop"
+        shortcut_name = name or "TARS"
+        desk = desktop / f"{shortcut_name}.desktop"
         if desk.exists():
-            return "ALREADY_EXISTS: Desktop shortcut already exists."
+            return f"ALREADY_EXISTS: Desktop shortcut already exists: {desk.name}"
         return "FAILED: Linux shortcut creation requires UI setup."
 
 
